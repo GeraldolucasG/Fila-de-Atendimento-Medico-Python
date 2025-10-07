@@ -1,143 +1,203 @@
 import sys
 
 class PacienteNode:
-    def _init_(self, nome, idade, prioridade):
+    def __init__(self, nome: str, idade: int, prioridade: int):
         self.nome = nome
         self.idade = idade
         self.prioridade = prioridade
         self.proximo = None
         self.anterior = None
-    
-    def _sizeof_(self):
-        return (sys.getsizeof(self.nome) + 
-                sys.getsizeof(self.idade) + 
-                sys.getsizeof(self.prioridade) + 
-                super()._sizeof_())
-
 
 class FilaDeAtendimento:
-    def _init_(self):
+    def __init__(self):
         self.inicio = None
         self.fim = None
-        self._ultimo_foi_P = False 
+        self.ultimo_atendido_prioritario = None
 
     def calcular_memoria_total(self):
+        """Estimativa simples usando sys.getsizeof para o container e nós."""
         mem_total = sys.getsizeof(self)
         temp = self.inicio
+        seen = set()
         while temp:
-            mem_total += temp._sizeof_()
+            obj_id = id(temp)
+            if obj_id not in seen:
+                mem_total += sys.getsizeof(temp)
+                seen.add(obj_id)
             temp = temp.proximo
         return mem_total
-    
-    def log_memoria(self, operacao, mem_antes):
-        mem_depois = self.calcular_memoria_total()
-        diff = mem_depois - mem_antes
-        
-        print("\n--- MONITORAMENTO DE MEMÓRIA ---")
-        print(f"Operação: {operacao}")
-        print(f"Total ANTES: {mem_antes} bytes")
-        print(f"Total DEPOIS: {mem_depois} bytes")
-        print(f"DIFERENÇA: {'+' if diff >= 0 else ''}{diff} bytes")
-        print("----------------------------------")
+
+    def _print_memoria(self, antes, depois):
+        print(f"Memória antes:  {antes} bytes")
+        print(f"Memória depois: {depois} bytes")
+        print(f"Diferença:      {depois - antes} bytes")
+
+    def iter_nodes(self):
+        cur = self.inicio
+        while cur:
+            yield cur
+            cur = cur.proximo
 
     def contar_pacientes(self):
         temp = self.inicio
         count_P = 0
         count_N = 0
-        primeiro_normal = None
         while temp:
             if temp.prioridade == 2:
                 count_P += 1
             else:
                 count_N += 1
-                if primeiro_normal is None:
-                    primeiro_normal = temp
             temp = temp.proximo
-        return count_P, count_N, primeiro_normal
+        return count_P, count_N
 
-    def adicionar_paciente(self, nome, idade, prioridade):
+    def encontrar_ultimo_prioritario(self):
+        """Retorna o último nó cujo prioridade == 2 (ou None)."""
+        cur = self.inicio
+        ultimo = None
+        while cur:
+            if cur.prioridade == 2:
+                ultimo = cur
+            cur = cur.proximo
+        return ultimo
+
+    def display(self):
+        print("\n--- Fila Atual ---")
+        if self.inicio is None:
+            print("(vazia)")
+            return
+        partes = []
+        temp = self.inicio
+        while temp:
+            etiqueta = "(P)" if temp.prioridade == 2 else "(N)"
+            partes.append(f"[ {temp.nome} {etiqueta} ]")
+            temp = temp.proximo
+        print(" --> ".join(partes))
+
+    def display_inverso(self):
+        print("\n--- Fila Inversa ---")
+        if self.fim is None:
+            print("(vazia)")
+            return
+        partes = []
+        temp = self.fim
+        while temp:
+            etiqueta = "(P)" if temp.prioridade == 2 else "(N)"
+            partes.append(f"[ {temp.nome} {etiqueta} ]")
+            temp = temp.anterior
+        print(" --> ".join(partes))
+
+    def adicionar_paciente(self, nome: str, idade: int, prioridade: int):
+        print(f"\n-> Adicionando '{nome}' (idade {idade}) [{'P' if prioridade==2 else 'N'}] ...")
         mem_antes = self.calcular_memoria_total()
-        novo_paciente = PacienteNode(nome, idade, prioridade)
+
+        novo = PacienteNode(nome, idade, prioridade)
 
         if self.inicio is None:
-            self.inicio = self.fim = novo_paciente
-        elif novo_paciente.prioridade == 1:
-            self.fim.proximo = novo_paciente
-            novo_paciente.anterior = self.fim
-            self.fim = novo_paciente
-        elif novo_paciente.prioridade == 2:
-            temp = self.inicio
-            while temp and temp.prioridade == 2:
-                temp = temp.proximo
-            
-            if temp is None:
-                self.fim.proximo = novo_paciente
-                novo_paciente.anterior = self.fim
-                self.fim = novo_paciente
-            elif temp == self.inicio:
-                novo_paciente.proximo = self.inicio
-                self.inicio.anterior = novo_paciente
-                self.inicio = novo_paciente
+            self.inicio = self.fim = novo
+        else:
+            if prioridade == 2:
+                ultimo_p = self.encontrar_ultimo_prioritario()
+                if ultimo_p is None:
+                    novo.proximo = self.inicio
+                    self.inicio.anterior = novo
+                    self.inicio = novo
+                else:
+                    novo.proximo = ultimo_p.proximo
+                    novo.anterior = ultimo_p
+                    ultimo_p.proximo = novo
+                    if novo.proximo:
+                        novo.proximo.anterior = novo
+                    else:
+                        self.fim = novo
             else:
-                no_anterior = temp.anterior
-                no_anterior.proximo = novo_paciente
-                novo_paciente.anterior = no_anterior
-                novo_paciente.proximo = temp
-                temp.anterior = novo_paciente
-        
-        self.log_memoria(f"Adicionar Paciente ({nome})", mem_antes)
+                self.fim.proximo = novo
+                novo.anterior = self.fim
+                self.fim = novo
+
+        mem_depois = self.calcular_memoria_total()
+        self._print_memoria(mem_antes, mem_depois)
 
     def remover_paciente(self):
         if self.inicio is None:
             print("\n-> Fila de atendimento já está vazia.")
             return
 
+        print("\n-> Removendo paciente...")
         mem_antes = self.calcular_memoria_total()
-        count_P, count_N, primeiro_normal = self.contar_pacientes()
+        count_P, count_N = self.contar_pacientes()
+        print(f"Status da fila: {count_P} prioritários (P) e {count_N} normais (N).")
 
-        paciente_a_remover = self.inicio
-        regra_ativa = count_N > 0 and (count_P / count_N) >= (1/7)
+        regra_ativa = (count_P > 0 and count_N > 0 and (count_P / count_N) >= (1/7))
 
-        if regra_ativa:
-            print("*** REGRA 1:7 ATIVA ***")
-            if self._ultimo_foi_P:
-                if primeiro_normal:
-                    paciente_a_remover = primeiro_normal
-                    print(f"Chamando paciente Normal mais antigo: {paciente_a_remover.nome}")
-                else:
-                    print("Apenas prioritários restantes. Atendendo o próximo P.")
-            else:
-                paciente_a_remover = self.inicio
-                print(f"Chamando paciente Prioritário mais antigo: {paciente_a_remover.nome}")
-        else:
+        paciente_a_remover = None
+
+        if not regra_ativa:
             paciente_a_remover = self.inicio
-        
-        self._ultimo_foi_P = (paciente_a_remover.prioridade == 2)
+        else:
+            print("Regra 1:7 ATIVADA. Aplicando alternância P <-> N na chamada.")
+            preferir_prioritario = True
+            if self.ultimo_atendido_prioritario is True:
+                preferir_prioritario = False
+            if preferir_prioritario:
+                temp = self.inicio
+                while temp:
+                    if temp.prioridade == 2:
+                        paciente_a_remover = temp
+                        break
+                    temp = temp.proximo
+                if paciente_a_remover is None:
+                    paciente_a_remover = self.inicio
+            else:
+                temp = self.inicio
+                while temp:
+                    if temp.prioridade == 1:
+                        paciente_a_remover = temp
+                        break
+                    temp = temp.proximo
+                if paciente_a_remover is None:
+                    paciente_a_remover = self.inicio
 
-        print(f"Paciente '{paciente_a_remover.nome}' ({'P' if paciente_a_remover.prioridade == 2 else 'N'}) atendido.")
-        
+        if paciente_a_remover is None:
+            print("Erro inesperado: nenhum paciente encontrado para remoção.")
+            return
+
+        print(f"Paciente atendido: '{paciente_a_remover.nome}' ({'P' if paciente_a_remover.prioridade==2 else 'N'}).")
+
+        proximo_nome = "FILA VAZIA"
+        if paciente_a_remover == self.inicio:
+            if paciente_a_remover.proximo:
+                proximo_nome = paciente_a_remover.proximo.nome
+        else:
+            if self.inicio:
+                proximo_nome = self.inicio.nome
+
+        print(f"Próximo da fila: '{proximo_nome}'.")
+
         if paciente_a_remover == self.inicio and paciente_a_remover == self.fim:
-            self.inicio = self.fim = None
+            self.inicio = None
+            self.fim = None
         elif paciente_a_remover == self.inicio:
             self.inicio = paciente_a_remover.proximo
-            if self.inicio: self.inicio.anterior = None
+            if self.inicio:
+                self.inicio.anterior = None
         elif paciente_a_remover == self.fim:
             self.fim = paciente_a_remover.anterior
-            if self.fim: self.fim.proximo = None
+            if self.fim:
+                self.fim.proximo = None
         else:
-            paciente_a_remover.anterior.proximo = paciente_a_remover.proximo
-            paciente_a_remover.proximo.anterior = paciente_a_remover.anterior
-        
-        proximo_nome = "FILA VAZIA"
-        if self.inicio:
-            status = "(P)" if self.inicio.prioridade == 2 else "(N)"
-            proximo_nome = f"{self.inicio.nome} {status}"
-        print(f"Próximo na fila: '{proximo_nome}'.")
-        
-        del paciente_a_remover
-        self.log_memoria("Remover Paciente", mem_antes)
+            ant = paciente_a_remover.anterior
+            prox = paciente_a_remover.proximo
+            ant.proximo = prox
+            prox.anterior = ant
 
-    def buscar_paciente(self, nome):
+        self.ultimo_atendido_prioritario = (paciente_a_remover.prioridade == 2)
+
+        del paciente_a_remover
+
+        mem_depois = self.calcular_memoria_total()
+        self._print_memoria(mem_antes, mem_depois)
+
+    def buscar_paciente(self, nome: str):
         temp = self.inicio
         while temp:
             if temp.nome.lower() == nome.lower():
@@ -145,134 +205,103 @@ class FilaDeAtendimento:
             temp = temp.proximo
         return None
 
-    def alterar_dados(self, nome_busca, novo_nome, nova_idade, nova_prioridade):
+    def alterar_dados(self, nome_busca: str, novo_nome: str, nova_idade: int, nova_prioridade: int):
+        print(f"\n-> Alterando dados de '{nome_busca}' ...")
         mem_antes = self.calcular_memoria_total()
-        paciente = self.buscar_paciente(nome_busca)
 
+        paciente = self.buscar_paciente(nome_busca)
         if not paciente:
             print(f"Erro: Paciente '{nome_busca}' não encontrado.")
             return
 
-        old_priority = paciente.prioridade
-        priority_changed = (old_priority != nova_prioridade)
-
-        paciente.nome = novo_nome
-        paciente.idade = nova_idade
-        paciente.prioridade = nova_prioridade
-        
-        if priority_changed:
+        prioridade_original = paciente.prioridade
+        if prioridade_original == nova_prioridade:
+            paciente.nome = novo_nome
+            paciente.idade = nova_idade
+            print("Dados alterados com sucesso (mesma prioridade).")
+        else:
             print("Prioridade alterada. Reposicionando paciente na fila...")
-            
             if paciente == self.inicio and paciente == self.fim:
                 self.inicio = self.fim = None
             elif paciente == self.inicio:
                 self.inicio = paciente.proximo
-                if self.inicio: self.inicio.anterior = None
+                if self.inicio:
+                    self.inicio.anterior = None
             elif paciente == self.fim:
                 self.fim = paciente.anterior
-                if self.fim: self.fim.proximo = None
+                if self.fim:
+                    self.fim.proximo = None
             else:
                 paciente.anterior.proximo = paciente.proximo
                 paciente.proximo.anterior = paciente.anterior
-            
-            self.adicionar_paciente(paciente.nome, paciente.idade, paciente.prioridade)
-            
-            self.log_memoria(f"Alterar Dados/Reposicionar ({nome_busca})", mem_antes)
+            self.adicionar_paciente(novo_nome, nova_idade, nova_prioridade)
+            mem_depois = self.calcular_memoria_total()
+            print("Reposicionamento concluído.")
+            self._print_memoria(mem_antes, mem_depois)
             return
 
-        print("Dados alterados com sucesso.")
-        self.log_memoria(f"Alterar Dados ({nome_busca})", mem_antes)
+        mem_depois = self.calcular_memoria_total()
+        self._print_memoria(mem_antes, mem_depois)
 
-    def display(self):
-        print("\n--- Fila Atual (Início -> Fim) ---")
-        if self.inicio is None:
-            print("Fila vazia.")
-            return
-        temp = self.inicio
-        while temp:
-            status = "(P)" if temp.prioridade == 2 else "(N)"
-            print(f"[ {temp.nome} ({status}) ] --> ", end="")
-            temp = temp.proximo
-        print("Final")
+    def carregar_amostra_inicial(self):
+        amostra = [
+            ("Alessandro", 58, 2),
+            ("Bianca", 24, 1),
+            ("Diego", 67, 2),
+            ("Elisa", 31, 1),
+            ("Fernando", 72, 2),
+            ("Gabriela", 28, 1),
+            ("Henrique", 49, 2),
+            ("Isabela", 36, 1),
+            ("Joana", 83, 2),
+            ("Kleber", 22, 1),
+        ]
+        for nome, idade, pr in amostra:
+            self.adicionar_paciente(nome, idade, pr)
 
-    def display_inverso(self):
-        print("\n--- Fila Inversa (Fim <- Início) ---")
-        if self.fim is None:
-            print("Fila vazia.")
-            return
-        temp = self.fim
-        while temp:
-            status = "(P)" if temp.prioridade == 2 else "(N)"
-            print(f"[ {temp.nome} ({status}) ] <-- ", end="")
-            temp = temp.anterior
-        print("Início")
 
 def modo_interativo():
     fila = FilaDeAtendimento()
-
-    print("\n--- Carregando fila inicial (10 pacientes) ---")
-    
-    pacientes_iniciais = [
-        ("Teresa", 30, 1), ("Gabriel", 70, 2), ("Monica", 45, 1), 
-        ("Helio", 65, 2), ("Irene", 22, 1), ("Pedro", 80, 2), 
-        ("Felipe", 33, 1), ("Victor", 28, 1), ("Bruno", 90, 2), 
-        ("Alice", 19, 1)
-    ]
-    for nome, idade, prioridade in pacientes_iniciais:
-        fila.adicionar_paciente(nome, idade, prioridade)
+    print("--- Carregando fila inicial com 10 pacientes de exemplo ---")
+    fila.carregar_amostra_inicial()
 
     while True:
+        print("\n--- Menu de Opções ---")
         fila.display()
-        print("\n--- MENU --- Comandos: add | remover | alterar | inverso | sair")
-        
-        comando_str = input("Digite o comando: ").strip()
+        print("\nComandos disponíveis:")
+        print("  add <nome> <idade> <P/N>      - ex: add Beatriz 25 P")
+        print("  remover                       - atender próximo paciente")
+        print("  alterar <nome> <novo_nome> <nova_idade> <P/N>")
+        print("  inverso                       - mostrar fila invertida")
+        print("  sair                          - encerrar")
+        comando_str = input("\nDigite o comando: ").strip()
         partes = comando_str.split()
-        if not partes: continue
-
+        if not partes:
+            continue
         acao = partes[0].lower()
         try:
             if acao == "add":
                 nome, idade_str, prio_str = partes[1], partes[2], partes[3]
                 idade = int(idade_str)
-                prioridade = 2 if prio_str.upper() in ('P', '2') else 1
+                prioridade = 2 if prio_str.upper() == 'P' else 1
                 fila.adicionar_paciente(nome, idade, prioridade)
-            
             elif acao == "remover":
                 fila.remover_paciente()
-            
             elif acao == "alterar":
                 nome_busca = partes[1]
-                
-                paciente_existente = fila.buscar_paciente(nome_busca)
-                if not paciente_existente:
-                    print(f"Erro: Paciente '{nome_busca}' não encontrado.")
-                    continue
-                
-                novo_nome = partes[2] if partes[2] != '-' else paciente_existente.nome
-                
-                nova_idade = paciente_existente.idade
-                if partes[3] != '-':
-                     nova_idade = int(partes[3])
-                
-                nova_prioridade = paciente_existente.prioridade
-                if partes[4] != '-':
-                    nova_prio_str = partes[4]
-                    nova_prioridade = 2 if nova_prio_str.upper() in ('P', '2') else 1
-                
-                fila.alterar_dados(nome_busca, novo_nome, nova_idade, nova_prioridade)
-            
+                novo_nome = partes[2]
+                nova_idade = int(partes[3])
+                nova_prio = 2 if partes[4].upper() == 'P' else 1
+                fila.alterar_dados(nome_busca, novo_nome, nova_idade, nova_prio)
             elif acao == "inverso":
                 fila.display_inverso()
-            
             elif acao == "sair":
                 print("Encerrando o programa.")
                 break
-            
             else:
                 print("Comando inválido. Tente novamente.")
-        
-        except (IndexError, ValueError) as e:
-            print(f"Erro de comando/argumento: Verifique o formato: [alterar nome_antigo nome_novo idade_nova prioridade_nova] (use '-' para não alterar). Detalhe: {e}")
+        except (IndexError, ValueError):
+            print("Erro: argumentos inválidos. Verifique o formato do comando.")
 
-if __name__ == "_main_":
+if __name__ == "__main__":
     modo_interativo()
