@@ -1,6 +1,6 @@
 import sys
 
-class Paciente:
+class PacienteNode:
     def _init_(self, nome, idade, prioridade):
         self.nome = nome
         self.idade = idade
@@ -26,10 +26,6 @@ class FilaDeAtendimento:
         temp = self.inicio
         while temp:
             mem_total += temp._sizeof_()
-            mem_total += sys.getsizeof(temp)
-            mem_total += sys.getsizeof(temp.nome)
-            mem_total += sys.getsizeof(temp.idade)
-            mem_total += sys.getsizeof(temp.prioridade)
             temp = temp.proximo
         return mem_total
     
@@ -61,7 +57,7 @@ class FilaDeAtendimento:
 
     def adicionar_paciente(self, nome, idade, prioridade):
         mem_antes = self.calcular_memoria_total()
-        novo_paciente = Paciente(nome, idade, prioridade)
+        novo_paciente = PacienteNode(nome, idade, prioridade)
 
         if self.inicio is None:
             self.inicio = self.fim = novo_paciente
@@ -247,7 +243,7 @@ def modo_interativo():
             elif acao == "alterar":
                 nome_busca = partes[1]
                 
-              paciente_existente = fila.buscar_paciente(nome_busca)
+                paciente_existente = fila.buscar_paciente(nome_busca)
                 if not paciente_existente:
                     print(f"Erro: Paciente '{nome_busca}' não encontrado.")
                     continue
@@ -278,5 +274,5 @@ def modo_interativo():
         except (IndexError, ValueError) as e:
             print(f"Erro de comando/argumento: Verifique o formato: [alterar nome_antigo nome_novo idade_nova prioridade_nova] (use '-' para não alterar). Detalhe: {e}")
 
-if _name_ == "_main_":
+if __name__ == "_main_":
     modo_interativo()
